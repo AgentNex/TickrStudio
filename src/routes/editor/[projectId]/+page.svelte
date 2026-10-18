@@ -12,6 +12,7 @@
 	import Inspector from '$lib/components/editor/Inspector.svelte';
 	import Timeline from '$lib/components/editor/Timeline.svelte';
 	import RecipeEditor from '$lib/components/editor/RecipeEditor.svelte';
+	import ExportModal from '$lib/components/editor/ExportModal.svelte';
 
 	import {
 		ArrowLeft,
@@ -40,6 +41,8 @@
 	let selectedKeyframeId = $state<string | null>(null);
 	let isPlaying = $state(false);
 
+	let isExportModalOpen = $state(false);
+
 	// Desktop view mode: 'visual' (Canvas + Timeline) vs 'recipe' (CodeMirror DSL)
 	let activeViewTab = $state<'visual' | 'recipe'>('visual');
 
@@ -52,14 +55,15 @@
 	const MAX_HISTORY = 40;
 
 	onMount(async () => {
+		const targetId = projectId || 'default_proj';
 		try {
-			const loaded = await localProjectRepo.getProject(projectId);
+			const loaded = await localProjectRepo.getProject(targetId);
 			if (loaded) {
 				project = loaded;
 			} else {
 				// Create default if not found
 				const created = createDefaultProject('New Composition', 1920, 1080);
-				created.id = projectId;
+				created.id = targetId;
 				await localProjectRepo.saveProject(created);
 				project = created;
 			}
@@ -417,10 +421,7 @@
 				variant="primary"
 				size="sm"
 				class="h-8 gap-1.5 shadow-sm text-xs ml-1"
-				onclick={() => {
-					window.location.href = `/editor/${projectId}#export`;
-					toast.info('Export Ready', 'WebCodecs video encoder pipeline active.');
-				}}
+				onclick={() => (isExportModalOpen = true)}
 			>
 				<Download size={14} />
 				<span class="hidden sm:inline">Export</span>
@@ -612,5 +613,13 @@
 				</button>
 			</nav>
 		</div>
+
+		{#if project}
+			<ExportModal
+				{project}
+				bind:open={isExportModalOpen}
+				onClose={() => (isExportModalOpen = false)}
+			/>
+		{/if}
 	{/if}
 </div>
