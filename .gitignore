@@ -1,0 +1,26 @@
+# Node & SvelteKit
+node_modules/
+.svelte-kit/
+build/
+dist/
+.vercel/
+
+# Environment & Credentials
+.env
+.env.*
+!.env.example
+.insforge/
+
+# System & Editor
+.DS_Store
+Thumbs.db
+*.log
+.codegraph/
+.impeccable/
+
+# Exports & test artifacts
+tests/results/
+blob-report/
+playwright-report/
+*.mp4
+*.webm
