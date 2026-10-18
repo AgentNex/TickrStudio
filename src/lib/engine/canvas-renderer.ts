@@ -177,11 +177,17 @@ export function hitTestObject(
 	sceneX: number,
 	sceneY: number
 ): EvaluatedSceneObject | null {
-	// Reverse order (top-most first)
 	for (let i = state.objects.length - 1; i >= 0; i--) {
 		const obj = state.objects[i];
 		const dx = sceneX - obj.transform.x;
 		const dy = sceneY - obj.transform.y;
+
+		// Un-rotate the point into object's local coordinate frame
+		const rad = (-(obj.transform.rotationDeg || 0) * Math.PI) / 180;
+		const cos = Math.cos(rad);
+		const sin = Math.sin(rad);
+		const localX = dx * cos - dy * sin;
+		const localY = dx * sin + dy * cos;
 
 		let w = 100;
 		let h = 100;
@@ -196,7 +202,10 @@ export function hitTestObject(
 			h = obj.fontSize || 48;
 		}
 
-		if (Math.abs(dx) <= (w * obj.transform.scaleX) / 2 && Math.abs(dy) <= (h * obj.transform.scaleY) / 2) {
+		const scaleX = Math.abs(obj.transform.scaleX || 1);
+		const scaleY = Math.abs(obj.transform.scaleY || 1);
+
+		if (Math.abs(localX) <= (w * scaleX) / 2 && Math.abs(localY) <= (h * scaleY) / 2) {
 			return obj;
 		}
 	}

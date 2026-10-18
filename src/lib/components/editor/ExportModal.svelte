@@ -36,12 +36,18 @@
 	let exportHeight = $state(1080);
 	let exportFps = $state(30);
 
+	let prevOpen = false;
 	$effect(() => {
-		if (open && project) {
+		if (open && !prevOpen && project) {
 			exportWidth = project.settings.width || 1920;
 			exportHeight = project.settings.height || 1080;
 			exportFps = project.settings.fps || 30;
+		}
+		prevOpen = open;
+	});
 
+	$effect(() => {
+		if (open) {
 			checkExportCapabilities(exportWidth, exportHeight, exportFps).then((res) => {
 				capabilities = res;
 			});

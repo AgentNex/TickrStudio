@@ -55,7 +55,13 @@
 			w = 1080;
 			h = 1080;
 		}
-		const proj = await projectsStore.create(newProjectName.trim() || 'Untitled Project', w, h);
+		const proj = await projectsStore.create(
+			newProjectName.trim() || 'Untitled Project',
+			w,
+			h,
+			selectedFps || 30,
+			(durationSeconds || 4) * 1000
+		);
 		isCreateOpen = false;
 		if (proj) {
 			window.location.href = `/editor/${proj.id}`;

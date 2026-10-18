@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { TimelineProject, SceneObject, EasingName } from '$lib/types/timeline';
+	import { evaluateTimeline } from '$lib/engine/evaluator';
 	import Input from '$lib/components/ui/Input.svelte';
 	import Slider from '$lib/components/ui/Slider.svelte';
 	import Button from '$lib/components/ui/Button.svelte';
@@ -45,12 +46,32 @@
 		} else {
 			(clone as any)[key] = val;
 		}
+
+		// If this property has keyframes, also update any keyframe matching the current playhead (within 50ms)
+		if (clone.keyframes && clone.keyframes[key]) {
+			const kfs = clone.keyframes[key]!;
+			const matchIdx = kfs.findIndex((k) => Math.abs(k.timeMs - currentTimeMs) < 50);
+			if (matchIdx !== -1) {
+				kfs[matchIdx].value = typeof val === 'number' ? val : Number(val) || val;
+			}
+		}
+
 		onUpdateObject(clone);
 	}
 
 	function handleAddKeyframe(propName: string, defaultValue: any) {
 		if (!selectedObj) return;
-		onAddKeyframe(selectedObj.id, propName, Math.round(currentTimeMs), defaultValue, 'easeOut');
+		const evaluated = evaluateTimeline(project, currentTimeMs);
+		const evalObj = evaluated.objects.find((o) => o.id === selectedObj.id);
+		let currentValue = defaultValue;
+		if (evalObj) {
+			if (propName in evalObj.transform) {
+				currentValue = (evalObj.transform as any)[propName];
+			} else if (propName in evalObj) {
+				currentValue = (evalObj as any)[propName];
+			}
+		}
+		onAddKeyframe(selectedObj.id, propName, Math.round(currentTimeMs), currentValue, 'easeOut');
 	}
 </script>
 

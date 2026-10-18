@@ -9,10 +9,12 @@ export function serializeToXml(project: TimelineProject): string {
 	);
 
 	for (const obj of project.objects) {
-		const baseAttrs = `id="${obj.id}" name="${escapeXml(obj.name)}" x="${obj.transform.x}" y="${obj.transform.y}" scaleX="${obj.transform.scaleX}" scaleY="${obj.transform.scaleY}" rotationDeg="${obj.transform.rotationDeg}" opacity="${obj.transform.opacity}"`;
+		const baseAttrs = `id="${obj.id}" name="${escapeXml(obj.name)}" visible="${obj.visible !== false}" locked="${obj.locked === true}" x="${obj.transform.x}" y="${obj.transform.y}" scaleX="${obj.transform.scaleX}" scaleY="${obj.transform.scaleY}" rotationDeg="${obj.transform.rotationDeg}" opacity="${obj.transform.opacity}"`;
 
 		if (obj.type === 'text') {
-			lines.push(`  <text ${baseAttrs} fontSize="${obj.fontSize}" fill="${obj.fill}" align="${obj.align}">`);
+			lines.push(
+				`  <text ${baseAttrs} fontSize="${obj.fontSize}" fontFamily="${escapeXml(obj.fontFamily || 'Inter, sans-serif')}" fontWeight="${obj.fontWeight || '700'}" fill="${obj.fill}" align="${obj.align}">`
+			);
 			lines.push(`    <content>${escapeXml(obj.content)}</content>`);
 		} else if (obj.type === 'rect') {
 			lines.push(
@@ -61,7 +63,7 @@ export function parseXmlSubset(xmlString: string): { success: boolean; project?:
 
 		const attrsStr = compMatch[1];
 		const getAttr = (name: string, def = '') => {
-			const m = attrsStr.match(new RegExp(`${name}="([^"]*)"`, 'i'));
+			const m = attrsStr.match(new RegExp(`(?:^|\\s)${name}="([^"]*)"`, 'i'));
 			return m ? m[1] : def;
 		};
 
@@ -70,6 +72,13 @@ export function parseXmlSubset(xmlString: string): { success: boolean; project?:
 		const fps = parseInt(getAttr('fps', '30'), 10);
 		const durationMs = parseInt(getAttr('duration', '4000'), 10);
 		const background = getAttr('background', '#0A0A0B');
+
+		if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+			return { success: false, error: 'Invalid canvas dimensions in XML composition.' };
+		}
+		if (!Number.isFinite(fps) || fps <= 0 || !Number.isFinite(durationMs) || durationMs <= 0) {
+			return { success: false, error: 'Invalid fps or duration in XML composition.' };
+		}
 
 		const objects: SceneObject[] = [];
 		const now = new Date().toISOString();
@@ -84,12 +93,14 @@ export function parseXmlSubset(xmlString: string): { success: boolean; project?:
 			const innerContent = match[3];
 
 			const getObjAttr = (name: string, def = '') => {
-				const m = objAttrs.match(new RegExp(`${name}="([^"]*)"`, 'i'));
+				const m = objAttrs.match(new RegExp(`(?:^|\\s)${name}="([^"]*)"`, 'i'));
 				return m ? m[1] : def;
 			};
 
 			const id = getObjAttr('id', 'obj_' + Math.random().toString(36).slice(2, 9));
 			const name = unescapeXml(getObjAttr('name', type));
+			const visible = getObjAttr('visible', 'true') !== 'false';
+			const locked = getObjAttr('locked', 'false') === 'true';
 			const x = parseFloat(getObjAttr('x', String(width / 2)));
 			const y = parseFloat(getObjAttr('y', String(height / 2)));
 			const scaleX = parseFloat(getObjAttr('scaleX', '1'));
@@ -97,13 +108,17 @@ export function parseXmlSubset(xmlString: string): { success: boolean; project?:
 			const rotationDeg = parseFloat(getObjAttr('rotationDeg', '0'));
 			const opacity = parseFloat(getObjAttr('opacity', '1'));
 
+			if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(scaleX) || !Number.isFinite(scaleY) || !Number.isFinite(rotationDeg) || !Number.isFinite(opacity)) {
+				return { success: false, error: `Invalid transform numeric values in object "${name}"` };
+			}
+
 			const keyframes: Record<string, Keyframe<any>[]> = {};
 			const kfRegex = /<keyframe\s+([^>]+)\/>/gi;
 			let kfMatch: RegExpExecArray | null;
 			while ((kfMatch = kfRegex.exec(innerContent)) !== null) {
 				const kfAttrs = kfMatch[1];
 				const getKfAttr = (k: string) => {
-					const m = kfAttrs.match(new RegExp(`${k}="([^"]*)"`, 'i'));
+					const m = kfAttrs.match(new RegExp(`(?:^|\\s)${k}="([^"]*)"`, 'i'));
 					return m ? m[1] : '';
 				};
 				const prop = getKfAttr('property');
@@ -129,6 +144,8 @@ export function parseXmlSubset(xmlString: string): { success: boolean; project?:
 				const contentMatch = innerContent.match(/<content>(.*?)<\/content>/is);
 				const content = contentMatch ? unescapeXml(contentMatch[1]) : name;
 				const fontSize = parseFloat(getObjAttr('fontSize', '48'));
+				const fontFamily = unescapeXml(getObjAttr('fontFamily', 'Inter, sans-serif'));
+				const fontWeight = getObjAttr('fontWeight', '700');
 				const fill = getObjAttr('fill', '#F5F5F0');
 				const align = (getObjAttr('align', 'center') as any) || 'center';
 
@@ -136,14 +153,14 @@ export function parseXmlSubset(xmlString: string): { success: boolean; project?:
 					id,
 					name,
 					type: 'text',
-					visible: true,
-					locked: false,
+					visible,
+					locked,
 					transform: baseTransform,
 					keyframes,
 					content,
 					fontSize,
-					fontFamily: 'Inter, sans-serif',
-					fontWeight: '600',
+					fontFamily,
+					fontWeight,
 					fill,
 					align
 				});
@@ -159,8 +176,8 @@ export function parseXmlSubset(xmlString: string): { success: boolean; project?:
 					id,
 					name,
 					type: 'rect',
-					visible: true,
-					locked: false,
+					visible,
+					locked,
 					transform: baseTransform,
 					keyframes,
 					width: w,
@@ -181,8 +198,8 @@ export function parseXmlSubset(xmlString: string): { success: boolean; project?:
 					id,
 					name,
 					type: 'ellipse',
-					visible: true,
-					locked: false,
+					visible,
+					locked,
 					transform: baseTransform,
 					keyframes,
 					radiusX: rx,

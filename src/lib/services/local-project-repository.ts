@@ -6,7 +6,13 @@ const DB_NAME = 'logicut_studio_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'projects';
 
-export function createDefaultProject(name = 'Untitled Project', width = 1920, height = 1080): TimelineProject {
+export function createDefaultProject(
+	name = 'Untitled Project',
+	width = 1920,
+	height = 1080,
+	fps = 30,
+	durationMs = 4000
+): TimelineProject {
 	const now = new Date().toISOString();
 	const projectId = 'proj_' + Math.random().toString(36).slice(2, 9);
 	const textObjId = 'obj_' + Math.random().toString(36).slice(2, 9);
@@ -21,8 +27,8 @@ export function createDefaultProject(name = 'Untitled Project', width = 1920, he
 		settings: {
 			width,
 			height,
-			fps: 30,
-			durationMs: 4000,
+			fps,
+			durationMs,
 			background: '#0A0A0B'
 		},
 		objects: [
@@ -101,7 +107,7 @@ export function createDefaultProject(name = 'Untitled Project', width = 1920, he
 						id: 'clip_1',
 						objectId: textObjId,
 						startMs: 0,
-						durationMs: 4000
+						durationMs
 					}
 				]
 			},
@@ -116,7 +122,7 @@ export function createDefaultProject(name = 'Untitled Project', width = 1920, he
 						id: 'clip_2',
 						objectId: rectObjId,
 						startMs: 0,
-						durationMs: 4000
+						durationMs
 					}
 				]
 			}
@@ -176,11 +182,9 @@ export class LocalProjectRepository implements ProjectRepository {
 	async saveProject(project: TimelineProject): Promise<void> {
 		try {
 			const db = await this.getDB();
-			const updated = {
-				...project,
-				updatedAt: new Date().toISOString()
-			};
-			await db.put(STORE_NAME, updated);
+			const plain = JSON.parse(JSON.stringify(project));
+			plain.updatedAt = new Date().toISOString();
+			await db.put(STORE_NAME, plain);
 		} catch (err) {
 			console.error(`Failed to save project ${project.id} to IndexedDB:`, err);
 			throw err;

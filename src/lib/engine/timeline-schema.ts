@@ -64,6 +64,23 @@ export function validateTimelineProject(data: unknown): ValidationResult {
 				errors.push(`Object "${obj.name || i}" has invalid type "${obj.type}".`);
 			}
 
+			if (!obj.transform || typeof obj.transform !== 'object') {
+				errors.push(`Object "${obj.name || i}" is missing a valid transform.`);
+			} else {
+				if (!Number.isFinite(obj.transform.x) || !Number.isFinite(obj.transform.y)) {
+					errors.push(`Object "${obj.name || i}" transform.x and transform.y must be finite numbers.`);
+				}
+				if (!Number.isFinite(obj.transform.scaleX) || !Number.isFinite(obj.transform.scaleY)) {
+					errors.push(`Object "${obj.name || i}" scaleX and scaleY must be finite numbers.`);
+				}
+				if (!Number.isFinite(obj.transform.rotationDeg)) {
+					errors.push(`Object "${obj.name || i}" rotationDeg must be a finite number.`);
+				}
+				if (!Number.isFinite(obj.transform.opacity) || obj.transform.opacity < 0 || obj.transform.opacity > 1) {
+					errors.push(`Object "${obj.name || i}" opacity must be a number between 0 and 1.`);
+				}
+			}
+
 			// Validate keyframes
 			if (obj.keyframes && typeof obj.keyframes === 'object') {
 				for (const prop in obj.keyframes) {
@@ -90,6 +107,29 @@ export function validateTimelineProject(data: unknown): ValidationResult {
 
 	if (!Array.isArray(proj.tracks)) {
 		errors.push('Project tracks must be an array.');
+	} else {
+		for (let i = 0; i < proj.tracks.length; i++) {
+			const track = proj.tracks[i];
+			if (!track || typeof track !== 'object') {
+				errors.push(`Track at index ${i} is not a valid object.`);
+				continue;
+			}
+			if (!track.id) errors.push(`Track at index ${i} is missing an id.`);
+			if (!Array.isArray(track.clips)) {
+				errors.push(`Track "${track.name || i}" clips must be an array.`);
+			} else {
+				for (let j = 0; j < track.clips.length; j++) {
+					const clip = track.clips[j];
+					if (!clip || typeof clip !== 'object' || !clip.id || !clip.objectId) {
+						errors.push(`Track "${track.name || i}" clip at index ${j} is invalid.`);
+					} else {
+						if (!Number.isFinite(clip.startMs) || !Number.isFinite(clip.durationMs) || clip.durationMs <= 0) {
+							errors.push(`Clip "${clip.id}" has invalid timing (startMs: ${clip.startMs}, durationMs: ${clip.durationMs}).`);
+						}
+					}
+				}
+			}
+		}
 	}
 
 	return {

@@ -95,49 +95,61 @@
 	<!-- Ruler & Tracks Container (Scrollable horizontally) -->
 	<div class="flex-1 flex flex-col overflow-y-auto overflow-x-hidden relative">
 		<!-- Time Ruler Header -->
-		<div
-			bind:this={timelineTrackEl}
-			role="slider"
-			aria-label="Timeline playhead scrubber"
-			aria-valuemin={0}
-			aria-valuemax={durationMs}
-			aria-valuenow={currentTimeMs}
-			tabindex={0}
-			onpointerdown={handlePointerDown}
-			onpointermove={handlePointerMove}
-			onpointerup={handlePointerUp}
-			class="h-7 bg-surface-2 border-b border-border relative cursor-ew-resize select-none shrink-0 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-		>
-			{#each ticks as tick}
-				{@const leftPct = (tick.timeMs / durationMs) * 100}
-				<div
-					class="absolute top-0 flex flex-col items-center pointer-events-none -translate-x-1/2"
-					style="left: {leftPct}%;"
-				>
-					<div class="w-px {tick.isMajor ? 'h-3.5 bg-border-strong' : 'h-2 bg-border'}"></div>
-					{#if tick.isMajor}
-						<span class="text-[9px] font-mono text-text-muted mt-0.5">{tick.label}</span>
-					{/if}
-				</div>
-			{/each}
-
-			<!-- Scrubber Needle Handle -->
+		<div class="h-7 bg-surface-2 border-b border-border flex shrink-0">
+			<!-- Header spacer matching track labels -->
+			<div class="w-32 shrink-0 border-r border-border/40 px-3 flex items-center text-[10px] text-text-muted font-mono">
+				00:00
+			</div>
+			<!-- Time Ruler Scrubber Track -->
 			<div
-				class="absolute top-0 bottom-0 pointer-events-none z-30 flex flex-col items-center -translate-x-1/2"
-				style="left: {playheadPercent}%;"
+				bind:this={timelineTrackEl}
+				role="slider"
+				aria-label="Timeline playhead scrubber"
+				aria-valuemin={0}
+				aria-valuemax={durationMs}
+				aria-valuenow={currentTimeMs}
+				tabindex={0}
+				onpointerdown={handlePointerDown}
+				onpointermove={handlePointerMove}
+				onpointerup={handlePointerUp}
+				class="flex-1 h-full relative cursor-ew-resize select-none focus:outline-none focus-visible:ring-1 focus-visible:ring-accent"
 			>
-				<div class="w-2.5 h-3 bg-danger rounded-b-xs shadow-sm"></div>
+				{#each ticks as tick}
+					{@const leftPct = (tick.timeMs / durationMs) * 100}
+					<div
+						class="absolute top-0 flex flex-col items-center pointer-events-none -translate-x-1/2"
+						style="left: {leftPct}%;"
+					>
+						<div class="w-px {tick.isMajor ? 'h-3.5 bg-border-strong' : 'h-2 bg-border'}"></div>
+						{#if tick.isMajor}
+							<span class="text-[9px] font-mono text-text-muted mt-0.5">{tick.label}</span>
+						{/if}
+					</div>
+				{/each}
+
+				<!-- Scrubber Needle Handle -->
+				<div
+					class="absolute top-0 bottom-0 pointer-events-none z-30 flex flex-col items-center -translate-x-1/2"
+					style="left: {playheadPercent}%;"
+				>
+					<div class="w-2.5 h-3 bg-danger rounded-b-xs shadow-sm"></div>
+				</div>
 			</div>
 		</div>
 
 		<!-- Track Lanes Area -->
 		<div class="flex-1 relative flex flex-col min-h-[140px] bg-bg/50">
-			<!-- Vertical Red Playhead Line across all tracks -->
-			<div
-				class="absolute top-0 bottom-0 pointer-events-none z-20 flex flex-col items-center -translate-x-1/2"
-				style="left: {playheadPercent}%;"
-			>
-				<div class="w-0.5 h-full bg-danger opacity-90"></div>
+			<!-- Vertical Red Playhead Line aligned to the track content area -->
+			<div class="absolute inset-0 pointer-events-none flex">
+				<div class="w-32 shrink-0"></div>
+				<div class="flex-1 relative h-full">
+					<div
+						class="absolute top-0 bottom-0 pointer-events-none z-20 flex flex-col items-center -translate-x-1/2"
+						style="left: {playheadPercent}%;"
+					>
+						<div class="w-0.5 h-full bg-danger opacity-90"></div>
+					</div>
+				</div>
 			</div>
 
 			<!-- Track Rows -->

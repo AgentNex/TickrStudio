@@ -93,6 +93,7 @@
 
 		return () => {
 			isDestroyed = true;
+			clearTimeout(debounceTimeout);
 			if (cmView) cmView.destroy();
 		};
 	});

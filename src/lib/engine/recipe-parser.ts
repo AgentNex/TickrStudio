@@ -82,8 +82,14 @@ export function parseRecipe(input: string): ParseResult {
 				const val = trimmed.replace('canvas:', '').trim();
 				const match = val.match(/^(\d+)\s*[xX]\s*(\d+)$/);
 				if (match) {
-					width = parseInt(match[1], 10);
-					height = parseInt(match[2], 10);
+					const w = parseInt(match[1], 10);
+					const h = parseInt(match[2], 10);
+					if (w > 0 && h > 0 && w <= 4320 && h <= 4320) {
+						width = w;
+						height = h;
+					} else {
+						errors.push({ line: lineNum, column: 8, message: `Canvas width and height must be between 1 and 4320 px (got ${w}x${h})` });
+					}
 				} else {
 					errors.push({ line: lineNum, column: 8, message: `Invalid canvas format: expected "WIDTHxHEIGHT" (e.g. 1920x1080), got "${val}"` });
 				}
@@ -264,7 +270,11 @@ export function parseRecipe(input: string): ParseResult {
 
 			// Handle quoted strings: "Make it move."
 			if (propVal.startsWith('"') && propVal.endsWith('"')) {
-				parsedVal = propVal.slice(1, -1);
+				parsedVal = propVal
+					.slice(1, -1)
+					.replace(/\\n/g, '\n')
+					.replace(/\\"/g, '"')
+					.replace(/\\\\/g, '\\');
 			} else if (!isNaN(Number(propVal))) {
 				parsedVal = Number(propVal);
 			}
@@ -276,9 +286,17 @@ export function parseRecipe(input: string): ParseResult {
 				case 'scaleY':
 				case 'rotationDeg':
 				case 'opacity':
-					if (currentObj.transform) {
+					if (!Number.isFinite(Number(parsedVal))) {
+						errors.push({ line: lineNum, column: indent + 1, message: `Property "${propName}" must be a finite number, got "${propVal}"` });
+					} else if (currentObj.transform) {
 						(currentObj.transform as any)[propName] = Number(parsedVal);
 					}
+					break;
+				case 'visible':
+					currentObj.visible = String(parsedVal).toLowerCase() !== 'false';
+					break;
+				case 'locked':
+					currentObj.locked = String(parsedVal).toLowerCase() === 'true';
 					break;
 				case 'content':
 					if (currentObj.type === 'text') {

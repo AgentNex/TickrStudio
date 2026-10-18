@@ -92,6 +92,66 @@ export function interpolateNumber(
 	return baseValue;
 }
 
+function parseHexColor(hex: string): [number, number, number] | null {
+	const cleaned = hex.trim().replace(/^#/, '');
+	if (cleaned.length === 3) {
+		const r = parseInt(cleaned[0] + cleaned[0], 16);
+		const g = parseInt(cleaned[1] + cleaned[1], 16);
+		const b = parseInt(cleaned[2] + cleaned[2], 16);
+		return [r, g, b];
+	} else if (cleaned.length === 6) {
+		const r = parseInt(cleaned.slice(0, 2), 16);
+		const g = parseInt(cleaned.slice(2, 4), 16);
+		const b = parseInt(cleaned.slice(4, 6), 16);
+		return [r, g, b];
+	}
+	return null;
+}
+
+export function interpolateColor(
+	timeMs: number,
+	baseColor: string | undefined,
+	keyframes?: Keyframe<string>[]
+): string {
+	if (!baseColor) return '#000000';
+	if (!keyframes || keyframes.length === 0) return baseColor;
+
+	const sorted = [...keyframes].sort((a, b) => a.timeMs - b.timeMs);
+	if (timeMs <= sorted[0].timeMs) return String(sorted[0].value);
+	if (timeMs >= sorted[sorted.length - 1].timeMs) return String(sorted[sorted.length - 1].value);
+
+	let prev = sorted[0];
+	let next = sorted[sorted.length - 1];
+
+	for (let i = 0; i < sorted.length - 1; i++) {
+		if (timeMs >= sorted[i].timeMs && timeMs <= sorted[i + 1].timeMs) {
+			prev = sorted[i];
+			next = sorted[i + 1];
+			break;
+		}
+	}
+
+	const segmentDuration = next.timeMs - prev.timeMs;
+	if (segmentDuration <= 0) return String(prev.value);
+
+	const linearT = (timeMs - prev.timeMs) / segmentDuration;
+	const easedT = applyEasing(linearT, next.easing || 'linear');
+
+	const c1 = parseHexColor(String(prev.value));
+	const c2 = parseHexColor(String(next.value));
+
+	if (!c1 || !c2) {
+		return easedT < 0.5 ? String(prev.value) : String(next.value);
+	}
+
+	const r = Math.round(c1[0] + (c2[0] - c1[0]) * easedT);
+	const g = Math.round(c1[1] + (c2[1] - c1[1]) * easedT);
+	const b = Math.round(c1[2] + (c2[2] - c1[2]) * easedT);
+
+	const toHex = (n: number) => Math.max(0, Math.min(255, n)).toString(16).padStart(2, '0');
+	return `#${toHex(r)}${toHex(g)}${toHex(b)}`.toUpperCase();
+}
+
 export function evaluateTimeline(project: TimelineProject, timeMs: number): RenderState {
 	const clampedTime = Math.max(0, Math.min(project.settings.durationMs, timeMs));
 	const evaluatedObjects: EvaluatedSceneObject[] = [];
@@ -129,6 +189,12 @@ export function evaluateTimeline(project: TimelineProject, timeMs: number): Rend
 			Math.min(1, interpolateNumber(clampedTime, obj.transform.opacity, kfs.opacity))
 		);
 
+		const fill = interpolateColor(clampedTime, (obj as any).fill || '#F5F5F0', kfs.fill as any);
+		const stroke = (obj as any).stroke
+			? interpolateColor(clampedTime, (obj as any).stroke, kfs.stroke as any)
+			: undefined;
+		const strokeWidth = interpolateNumber(clampedTime, (obj as any).strokeWidth || 0, kfs.strokeWidth);
+
 		const evaluated: EvaluatedSceneObject = {
 			id: obj.id,
 			name: obj.name,
@@ -143,9 +209,9 @@ export function evaluateTimeline(project: TimelineProject, timeMs: number): Rend
 				rotationDeg,
 				opacity
 			},
-			fill: (obj as any).fill || '#F5F5F0',
-			stroke: (obj as any).stroke,
-			strokeWidth: (obj as any).strokeWidth
+			fill,
+			stroke,
+			strokeWidth
 		};
 
 		if (obj.type === 'text') {

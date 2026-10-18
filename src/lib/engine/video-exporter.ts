@@ -117,6 +117,11 @@ export async function exportProjectVideo(
 					percent
 				});
 
+				// Backpressure check: wait if encoder queue is backed up
+				while (encoder.encodeQueueSize > 5) {
+					await new Promise((r) => setTimeout(r, 10));
+				}
+
 				// Yield to event loop every 5 frames
 				if (i % 5 === 0) {
 					await new Promise((r) => setTimeout(r, 0));
@@ -163,47 +168,51 @@ async function exportWithMediaRecorder(
 	const recorder = new MediaRecorder(stream, { mimeType });
 	const chunks: BlobPart[] = [];
 
-	recorder.ondataavailable = (e) => {
-		if (e.data && e.data.size > 0) chunks.push(e.data);
-	};
+	try {
+		recorder.ondataavailable = (e) => {
+			if (e.data && e.data.size > 0) chunks.push(e.data);
+		};
 
-	const finishedPromise = new Promise<void>((resolve, reject) => {
-		recorder.onstop = () => resolve();
-		recorder.onerror = (e) => reject(e);
-	});
-
-	recorder.start();
-
-	for (let i = 0; i < totalFrames; i++) {
-		if (options.checkCancelled?.()) {
-			recorder.stop();
-			throw new Error('Export cancelled by user.');
-		}
-
-		const timeMs = (i / fps) * 1000;
-		const renderState = evaluateTimeline(project, timeMs);
-		renderSceneToCanvas(ctx, renderState, { drawGizmos: false });
-
-		const percent = Math.round(((i + 1) / totalFrames) * 100);
-		options.onProgress?.({
-			currentFrame: i + 1,
-			totalFrames,
-			percent
+		const finishedPromise = new Promise<void>((resolve, reject) => {
+			recorder.onstop = () => resolve();
+			recorder.onerror = (e) => reject(e);
 		});
 
-		await new Promise((r) => setTimeout(r, 1000 / fps));
+		recorder.start();
+
+		for (let i = 0; i < totalFrames; i++) {
+			if (options.checkCancelled?.()) {
+				recorder.stop();
+				throw new Error('Export cancelled by user.');
+			}
+
+			const timeMs = (i / fps) * 1000;
+			const renderState = evaluateTimeline(project, timeMs);
+			renderSceneToCanvas(ctx, renderState, { drawGizmos: false });
+
+			const percent = Math.round(((i + 1) / totalFrames) * 100);
+			options.onProgress?.({
+				currentFrame: i + 1,
+				totalFrames,
+				percent
+			});
+
+			await new Promise((r) => setTimeout(r, 1000 / fps));
+		}
+
+		recorder.stop();
+		await finishedPromise;
+
+		const blob = new Blob(chunks, { type: mimeType });
+		const safeName = project.name.replace(/[^a-zA-Z0-9_\-]/g, '_') || 'composition';
+
+		return {
+			blob,
+			extension: 'webm',
+			mimeType,
+			filename: `${safeName}_${width}x${height}_${fps}fps.webm`
+		};
+	} finally {
+		stream.getTracks().forEach((t) => t.stop());
 	}
-
-	recorder.stop();
-	await finishedPromise;
-
-	const blob = new Blob(chunks, { type: mimeType });
-	const safeName = project.name.replace(/[^a-zA-Z0-9_\-]/g, '_') || 'composition';
-
-	return {
-		blob,
-		extension: 'webm',
-		mimeType,
-		filename: `${safeName}_${width}x${height}_${fps}fps.webm`
-	};
 }

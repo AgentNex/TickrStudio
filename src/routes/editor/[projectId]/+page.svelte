@@ -62,6 +62,21 @@
 		currentTimeMs = 0;
 	}
 
+	function handleApplyRecipeProject(parsed: TimelineProject) {
+		if (!project) return;
+		const merged: TimelineProject = {
+			...parsed,
+			id: project.id,
+			name: project.name,
+			createdAt: project.createdAt,
+			updatedAt: new Date().toISOString()
+		};
+		updateProject(merged);
+	}
+
+	// Viewport responsive tracking
+	let isMobile = $state(false);
+
 	// Desktop view mode: 'visual' (Canvas + Timeline) vs 'recipe' (CodeMirror DSL)
 	let activeViewTab = $state<'visual' | 'recipe'>('visual');
 
@@ -74,6 +89,13 @@
 	const MAX_HISTORY = 40;
 
 	onMount(async () => {
+		const mql = window.matchMedia('(max-width: 767px)');
+		isMobile = mql.matches;
+		const resizeHandler = (e: MediaQueryListEvent) => {
+			isMobile = e.matches;
+		};
+		mql.addEventListener('change', resizeHandler);
+
 		const targetId = projectId || 'default_proj';
 		try {
 			const loaded = await localProjectRepo.getProject(targetId);
@@ -250,7 +272,7 @@
 		const target = clone.objects.find((o) => o.id === id);
 		if (target) {
 			target.visible = !target.visible;
-			updateProject(clone, false);
+			updateProject(clone, true);
 		}
 	}
 
@@ -260,7 +282,7 @@
 		const target = clone.objects.find((o) => o.id === id);
 		if (target) {
 			target.locked = !target.locked;
-			updateProject(clone, false);
+			updateProject(clone, true);
 		}
 	}
 
@@ -279,9 +301,41 @@
 		const clone = JSON.parse(JSON.stringify(project)) as TimelineProject;
 		const target = clone.objects.find((o) => o.id === id);
 		if (target && !target.locked) {
+			const dx = x - target.transform.x;
+			const dy = y - target.transform.y;
 			target.transform.x = x;
 			target.transform.y = y;
+
+			if (target.keyframes?.x && target.keyframes.x.length > 0) {
+				for (const kf of target.keyframes.x) {
+					kf.value = (Number(kf.value) || 0) + dx;
+				}
+			}
+			if (target.keyframes?.y && target.keyframes.y.length > 0) {
+				for (const kf of target.keyframes.y) {
+					kf.value = (Number(kf.value) || 0) + dy;
+				}
+			}
 			updateProject(clone, false);
+		}
+	}
+
+	function handleObjectMoveEnd() {
+		if (!project) return;
+		const clone = JSON.parse(JSON.stringify(project)) as TimelineProject;
+		updateProject(clone, true);
+	}
+
+	function handleDeleteKeyframe(objectId: string, keyframeId: string) {
+		if (!project) return;
+		const clone = JSON.parse(JSON.stringify(project)) as TimelineProject;
+		const target = clone.objects.find((o) => o.id === objectId);
+		if (target && target.keyframes) {
+			for (const prop of Object.keys(target.keyframes)) {
+				target.keyframes[prop] = target.keyframes[prop]!.filter((k) => k.id !== keyframeId);
+			}
+			updateProject(clone);
+			toast.info('Deleted keyframe');
 		}
 	}
 
@@ -319,9 +373,11 @@
 
 	// Keyboard shortcuts
 	function handleKeydown(e: KeyboardEvent) {
-		// Prevent firing in input or textarea
-		const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
-		if (tag === 'input' || tag === 'textarea') return;
+		// Prevent firing in input, textarea, contenteditable, or CodeMirror
+		const target = e.target as HTMLElement | null;
+		if (!target) return;
+		const tag = target.tagName?.toLowerCase();
+		if (tag === 'input' || tag === 'textarea' || target.isContentEditable || target.closest?.('.cm-editor')) return;
 
 		if (e.code === 'Space') {
 			e.preventDefault();
@@ -334,7 +390,10 @@
 				handleUndo();
 			}
 		} else if (e.key === 'Delete' || e.key === 'Backspace') {
-			if (selectedObjectId) {
+			if (selectedKeyframeId && selectedObjectId) {
+				handleDeleteKeyframe(selectedObjectId, selectedKeyframeId);
+				selectedKeyframeId = null;
+			} else if (selectedObjectId) {
 				handleDeleteObject(selectedObjectId);
 			}
 		}
@@ -476,26 +535,73 @@
 			<LoaderCircle size={20} class="animate-spin text-accent" />
 		</div>
 	{:else}
-		<!-- Desktop View: Visual Workspace -->
-		{#if activeViewTab === 'visual'}
-			<div class="flex-1 hidden md:flex flex-col min-h-0 overflow-hidden">
-				<!-- Top Split: Layers | Canvas | Inspector -->
-				<div class="flex-1 flex min-h-0 overflow-hidden">
-					<!-- Left Panel: Layers -->
-					<div class="w-64 h-full shrink-0">
-						<LayersList
-							{project}
-							{selectedObjectId}
-							onSelectObject={(id) => (selectedObjectId = id)}
-							onAddObject={handleAddObject}
-							onDeleteObject={handleDeleteObject}
-							onToggleVisibility={handleToggleVisibility}
-							onToggleLock={handleToggleLock}
-						/>
+		{#if !isMobile}
+			<!-- Desktop View: Visual Workspace -->
+			{#if activeViewTab === 'visual'}
+				<div class="flex-1 flex flex-col min-h-0 overflow-hidden">
+					<!-- Top Split: Layers | Canvas | Inspector -->
+					<div class="flex-1 flex min-h-0 overflow-hidden">
+						<!-- Left Panel: Layers -->
+						<div class="w-64 h-full shrink-0">
+							<LayersList
+								{project}
+								{selectedObjectId}
+								onSelectObject={(id) => (selectedObjectId = id)}
+								onAddObject={handleAddObject}
+								onDeleteObject={handleDeleteObject}
+								onToggleVisibility={handleToggleVisibility}
+								onToggleLock={handleToggleLock}
+							/>
+						</div>
+
+						<!-- Center Panel: Canvas Preview & Transport -->
+						<div class="flex-1 h-full min-w-0">
+							<CanvasPreview
+								{project}
+								bind:currentTimeMs
+								bind:selectedObjectId
+								bind:isPlaying
+								onTimeChange={(t) => (currentTimeMs = t)}
+								onSelectObject={(id) => (selectedObjectId = id)}
+								onObjectMove={handleObjectMove}
+								onObjectMoveEnd={handleObjectMoveEnd}
+							/>
+						</div>
+
+						<!-- Right Panel: Inspector -->
+						<div class="w-72 h-full shrink-0">
+							<Inspector
+								{project}
+								{selectedObjectId}
+								{currentTimeMs}
+								onUpdateObject={handleUpdateObject}
+								onAddKeyframe={handleAddKeyframe}
+							/>
+						</div>
 					</div>
 
-					<!-- Center Panel: Canvas Preview & Transport -->
-					<div class="flex-1 h-full min-w-0">
+					<!-- Bottom Split: Timeline -->
+					<div class="h-56 shrink-0">
+						<Timeline
+							{project}
+							{currentTimeMs}
+							{selectedObjectId}
+							bind:selectedKeyframeId
+							onTimeChange={(t) => (currentTimeMs = t)}
+							onSelectObject={(id) => (selectedObjectId = id)}
+						/>
+					</div>
+				</div>
+			<!-- Desktop View: Recipe Code DSL -->
+			{:else}
+				<div class="flex-1 flex min-h-0 overflow-hidden">
+					<div class="w-1/2 h-full border-r border-border">
+						<RecipeEditor
+							{project}
+							onProjectUpdated={handleApplyRecipeProject}
+						/>
+					</div>
+					<div class="w-1/2 h-full">
 						<CanvasPreview
 							{project}
 							bind:currentTimeMs
@@ -504,11 +610,50 @@
 							onTimeChange={(t) => (currentTimeMs = t)}
 							onSelectObject={(id) => (selectedObjectId = id)}
 							onObjectMove={handleObjectMove}
+							onObjectMoveEnd={handleObjectMoveEnd}
 						/>
 					</div>
-
-					<!-- Right Panel: Inspector -->
-					<div class="w-72 h-full shrink-0">
+				</div>
+			{/if}
+		{:else}
+			<!-- Mobile Adapted View (Screens < 768px) -->
+			<div class="flex-1 flex flex-col min-h-0 overflow-hidden">
+				<!-- Active Mobile Pane -->
+				<div class="flex-1 min-h-0 overflow-hidden">
+					{#if mobileSection === 'preview'}
+						<CanvasPreview
+							{project}
+							bind:currentTimeMs
+							bind:selectedObjectId
+							bind:isPlaying
+							onTimeChange={(t) => (currentTimeMs = t)}
+							onSelectObject={(id) => (selectedObjectId = id)}
+							onObjectMove={handleObjectMove}
+							onObjectMoveEnd={handleObjectMoveEnd}
+						/>
+					{:else if mobileSection === 'timeline'}
+						<Timeline
+							{project}
+							{currentTimeMs}
+							{selectedObjectId}
+							bind:selectedKeyframeId
+							onTimeChange={(t) => (currentTimeMs = t)}
+							onSelectObject={(id) => (selectedObjectId = id)}
+						/>
+					{:else if mobileSection === 'layers'}
+						<LayersList
+							{project}
+							{selectedObjectId}
+							onSelectObject={(id) => {
+								selectedObjectId = id;
+								mobileSection = 'inspector';
+							}}
+							onAddObject={handleAddObject}
+							onDeleteObject={handleDeleteObject}
+							onToggleVisibility={handleToggleVisibility}
+							onToggleLock={handleToggleLock}
+						/>
+					{:else if mobileSection === 'inspector'}
 						<Inspector
 							{project}
 							{selectedObjectId}
@@ -516,95 +661,13 @@
 							onUpdateObject={handleUpdateObject}
 							onAddKeyframe={handleAddKeyframe}
 						/>
-					</div>
+					{:else if mobileSection === 'recipe'}
+						<RecipeEditor
+							{project}
+							onProjectUpdated={handleApplyRecipeProject}
+						/>
+					{/if}
 				</div>
-
-				<!-- Bottom Split: Timeline -->
-				<div class="h-56 shrink-0">
-					<Timeline
-						{project}
-						{currentTimeMs}
-						{selectedObjectId}
-						bind:selectedKeyframeId
-						onTimeChange={(t) => (currentTimeMs = t)}
-						onSelectObject={(id) => (selectedObjectId = id)}
-					/>
-				</div>
-			</div>
-		<!-- Desktop View: Recipe Code DSL -->
-		{:else}
-			<div class="flex-1 hidden md:flex min-h-0 overflow-hidden">
-				<div class="w-1/2 h-full border-r border-border">
-					<RecipeEditor
-						{project}
-						onProjectUpdated={(p) => updateProject(p)}
-					/>
-				</div>
-				<div class="w-1/2 h-full">
-					<CanvasPreview
-						{project}
-						bind:currentTimeMs
-						bind:selectedObjectId
-						bind:isPlaying
-						onTimeChange={(t) => (currentTimeMs = t)}
-						onSelectObject={(id) => (selectedObjectId = id)}
-						onObjectMove={handleObjectMove}
-					/>
-				</div>
-			</div>
-		{/if}
-
-		<!-- Mobile Adapted View (Screens < 768px) -->
-		<div class="flex-1 flex md:hidden flex-col min-h-0 overflow-hidden">
-			<!-- Active Mobile Pane -->
-			<div class="flex-1 min-h-0 overflow-hidden">
-				{#if mobileSection === 'preview'}
-					<CanvasPreview
-						{project}
-						bind:currentTimeMs
-						bind:selectedObjectId
-						bind:isPlaying
-						onTimeChange={(t) => (currentTimeMs = t)}
-						onSelectObject={(id) => (selectedObjectId = id)}
-						onObjectMove={handleObjectMove}
-					/>
-				{:else if mobileSection === 'timeline'}
-					<Timeline
-						{project}
-						{currentTimeMs}
-						{selectedObjectId}
-						bind:selectedKeyframeId
-						onTimeChange={(t) => (currentTimeMs = t)}
-						onSelectObject={(id) => (selectedObjectId = id)}
-					/>
-				{:else if mobileSection === 'layers'}
-					<LayersList
-						{project}
-						{selectedObjectId}
-						onSelectObject={(id) => {
-							selectedObjectId = id;
-							mobileSection = 'inspector';
-						}}
-						onAddObject={handleAddObject}
-						onDeleteObject={handleDeleteObject}
-						onToggleVisibility={handleToggleVisibility}
-						onToggleLock={handleToggleLock}
-					/>
-				{:else if mobileSection === 'inspector'}
-					<Inspector
-						{project}
-						{selectedObjectId}
-						{currentTimeMs}
-						onUpdateObject={handleUpdateObject}
-						onAddKeyframe={handleAddKeyframe}
-					/>
-				{:else if mobileSection === 'recipe'}
-					<RecipeEditor
-						{project}
-						onProjectUpdated={(p) => updateProject(p)}
-					/>
-				{/if}
-			</div>
 
 			<!-- Mobile Bottom Section Switcher Bar -->
 			<nav class="h-14 border-t border-border bg-surface-1 flex items-center justify-around px-2 shrink-0 z-30 pb-[env(safe-area-inset-bottom)]">
@@ -654,22 +717,23 @@
 				</button>
 			</nav>
 		</div>
-
-		{#if project}
-			<ExportModal
-				{project}
-				bind:open={isExportModalOpen}
-				onClose={() => (isExportModalOpen = false)}
-			/>
-			<AiGeneratorModal
-				bind:open={isAiModalOpen}
-				onApply={handleApplyAi}
-			/>
-			<InterchangeModal
-				bind:open={isInterchangeModalOpen}
-				{project}
-				onImport={handleImportScene}
-			/>
-		{/if}
 	{/if}
+
+	{#if project}
+		<ExportModal
+			{project}
+			bind:open={isExportModalOpen}
+			onClose={() => (isExportModalOpen = false)}
+		/>
+		<AiGeneratorModal
+			bind:open={isAiModalOpen}
+			onApply={handleApplyAi}
+		/>
+		<InterchangeModal
+			bind:open={isInterchangeModalOpen}
+			{project}
+			onImport={handleImportScene}
+		/>
+	{/if}
+{/if}
 </div>

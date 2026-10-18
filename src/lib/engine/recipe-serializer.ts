@@ -11,13 +11,24 @@ export function serializeToRecipe(project: TimelineProject): string {
 	lines.push('');
 
 	for (const obj of project.objects) {
-		lines.push(`${obj.type} ${obj.name.replace(/\s+/g, '_')}:`);
+		const safeName = obj.name.replace(/[^a-zA-Z0-9_\-]/g, '_') || obj.type;
+		lines.push(`${obj.type} ${safeName}:`);
+
+		if (obj.visible === false) lines.push(`  visible: false`);
+		if (obj.locked === true) lines.push(`  locked: true`);
 
 		if (obj.type === 'text') {
-			lines.push(`  content: "${obj.content}"`);
+			const escapedContent = (obj.content || '')
+				.replace(/\\/g, '\\\\')
+				.replace(/"/g, '\\"')
+				.replace(/\n/g, '\\n');
+			lines.push(`  content: "${escapedContent}"`);
 			lines.push(`  x: ${Math.round(obj.transform.x)}`);
 			lines.push(`  y: ${Math.round(obj.transform.y)}`);
 			lines.push(`  fontSize: ${obj.fontSize}`);
+			if (obj.fontWeight) lines.push(`  fontWeight: "${obj.fontWeight}"`);
+			if (obj.fontFamily) lines.push(`  fontFamily: "${obj.fontFamily}"`);
+			if (obj.align) lines.push(`  align: ${obj.align}`);
 			lines.push(`  fill: ${obj.fill}`);
 		} else if (obj.type === 'rect') {
 			lines.push(`  x: ${Math.round(obj.transform.x)}`);

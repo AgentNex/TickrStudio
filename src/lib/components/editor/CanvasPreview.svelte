@@ -24,6 +24,7 @@
 		onTimeChange?: (timeMs: number) => void;
 		onSelectObject?: (id: string | null) => void;
 		onObjectMove?: (id: string, x: number, y: number) => void;
+		onObjectMoveEnd?: () => void;
 	}
 
 	let {
@@ -33,7 +34,8 @@
 		isPlaying = $bindable(false),
 		onTimeChange,
 		onSelectObject,
-		onObjectMove
+		onObjectMove,
+		onObjectMoveEnd
 	}: Props = $props();
 
 	let canvasEl: HTMLCanvasElement | null = $state(null);
@@ -131,23 +133,25 @@
 	function handlePointerDown(e: PointerEvent) {
 		if (!canvasEl) return;
 		const rect = canvasEl.getBoundingClientRect();
+		if (rect.width <= 0 || rect.height <= 0) return;
 		const clickX = e.clientX - rect.left;
 		const clickY = e.clientY - rect.top;
 
-		// Map to scene coordinates
-		const canvasWidth = canvasEl.width;
-		const canvasHeight = canvasEl.height;
-		const dpr = window.devicePixelRatio || 1;
+		// Map from CSS pixels to canvas internal bitmap pixels
+		const pixelScaleX = canvasEl.width / rect.width;
+		const pixelScaleY = canvasEl.height / rect.height;
+		const bitmapX = clickX * pixelScaleX;
+		const bitmapY = clickY * pixelScaleY;
 
-		const scaleX = canvasWidth / project.settings.width;
-		const scaleY = canvasHeight / project.settings.height;
+		const scaleX = canvasEl.width / project.settings.width;
+		const scaleY = canvasEl.height / project.settings.height;
 		const fitScale = Math.min(scaleX, scaleY);
 
-		const offsetX = (canvasWidth - project.settings.width * fitScale) / 2;
-		const offsetY = (canvasHeight - project.settings.height * fitScale) / 2;
+		const offsetX = (canvasEl.width - project.settings.width * fitScale) / 2;
+		const offsetY = (canvasEl.height - project.settings.height * fitScale) / 2;
 
-		const sceneX = (clickX * dpr - offsetX) / fitScale;
-		const sceneY = (clickY * dpr - offsetY) / fitScale;
+		const sceneX = (bitmapX - offsetX) / fitScale;
+		const sceneY = (bitmapY - offsetY) / fitScale;
 
 		const hit = hitTestObject(currentState, sceneX, sceneY);
 		if (hit) {
@@ -167,22 +171,24 @@
 	function handlePointerMove(e: PointerEvent) {
 		if (!isDragging || !selectedObjectId || !canvasEl) return;
 		const rect = canvasEl.getBoundingClientRect();
+		if (rect.width <= 0 || rect.height <= 0) return;
 		const clickX = e.clientX - rect.left;
 		const clickY = e.clientY - rect.top;
 
-		const canvasWidth = canvasEl.width;
-		const canvasHeight = canvasEl.height;
-		const dpr = window.devicePixelRatio || 1;
+		const pixelScaleX = canvasEl.width / rect.width;
+		const pixelScaleY = canvasEl.height / rect.height;
+		const bitmapX = clickX * pixelScaleX;
+		const bitmapY = clickY * pixelScaleY;
 
-		const scaleX = canvasWidth / project.settings.width;
-		const scaleY = canvasHeight / project.settings.height;
+		const scaleX = canvasEl.width / project.settings.width;
+		const scaleY = canvasEl.height / project.settings.height;
 		const fitScale = Math.min(scaleX, scaleY);
 
-		const offsetX = (canvasWidth - project.settings.width * fitScale) / 2;
-		const offsetY = (canvasHeight - project.settings.height * fitScale) / 2;
+		const offsetX = (canvasEl.width - project.settings.width * fitScale) / 2;
+		const offsetY = (canvasEl.height - project.settings.height * fitScale) / 2;
 
-		const sceneX = (clickX * dpr - offsetX) / fitScale;
-		const sceneY = (clickY * dpr - offsetY) / fitScale;
+		const sceneX = (bitmapX - offsetX) / fitScale;
+		const sceneY = (bitmapY - offsetY) / fitScale;
 
 		const deltaX = sceneX - dragStartPos.x;
 		const deltaY = sceneY - dragStartPos.y;
@@ -199,6 +205,7 @@
 			try {
 				(e.target as HTMLElement).releasePointerCapture(e.pointerId);
 			} catch {}
+			onObjectMoveEnd?.();
 		}
 	}
 
