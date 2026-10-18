@@ -14,6 +14,7 @@
 	import RecipeEditor from '$lib/components/editor/RecipeEditor.svelte';
 	import ExportModal from '$lib/components/editor/ExportModal.svelte';
 	import AiGeneratorModal from '$lib/components/editor/AiGeneratorModal.svelte';
+	import InterchangeModal from '$lib/components/editor/InterchangeModal.svelte';
 
 	import {
 		ArrowLeft,
@@ -28,7 +29,8 @@
 		Film,
 		CheckCircle2,
 		LoaderCircle,
-		Sparkles
+		Sparkles,
+		ArrowLeftRight
 	} from '@lucide/svelte';
 
 	let projectId = $derived(page.params.projectId);
@@ -44,11 +46,19 @@
 
 	let isExportModalOpen = $state(false);
 	let isAiModalOpen = $state(false);
+	let isInterchangeModalOpen = $state(false);
 
 	function handleApplyAi(aiProj: TimelineProject) {
 		if (!project) return;
 		aiProj.id = project.id;
 		updateProject(aiProj);
+		currentTimeMs = 0;
+	}
+
+	function handleImportScene(imported: TimelineProject) {
+		if (!project) return;
+		imported.id = project.id;
+		updateProject(imported);
 		currentTimeMs = 0;
 	}
 
@@ -438,6 +448,17 @@
 			</Button>
 
 			<Button
+				variant="secondary"
+				size="sm"
+				class="h-8 gap-1.5 text-xs"
+				onclick={() => (isInterchangeModalOpen = true)}
+				title="Scene Interchange (JSON / XML)"
+			>
+				<ArrowLeftRight size={14} class="text-accent" />
+				<span class="hidden lg:inline">Interchange</span>
+			</Button>
+
+			<Button
 				variant="primary"
 				size="sm"
 				class="h-8 gap-1.5 shadow-sm text-xs ml-1"
@@ -643,6 +664,11 @@
 			<AiGeneratorModal
 				bind:open={isAiModalOpen}
 				onApply={handleApplyAi}
+			/>
+			<InterchangeModal
+				bind:open={isInterchangeModalOpen}
+				{project}
+				onImport={handleImportScene}
 			/>
 		{/if}
 	{/if}
