@@ -24,3 +24,5 @@ blob-report/
 playwright-report/
 *.mp4
 *.webm
+.vercel
+.env*
