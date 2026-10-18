@@ -13,6 +13,7 @@
 	import Timeline from '$lib/components/editor/Timeline.svelte';
 	import RecipeEditor from '$lib/components/editor/RecipeEditor.svelte';
 	import ExportModal from '$lib/components/editor/ExportModal.svelte';
+	import AiGeneratorModal from '$lib/components/editor/AiGeneratorModal.svelte';
 
 	import {
 		ArrowLeft,
@@ -42,6 +43,14 @@
 	let isPlaying = $state(false);
 
 	let isExportModalOpen = $state(false);
+	let isAiModalOpen = $state(false);
+
+	function handleApplyAi(aiProj: TimelineProject) {
+		if (!project) return;
+		aiProj.id = project.id;
+		updateProject(aiProj);
+		currentTimeMs = 0;
+	}
 
 	// Desktop view mode: 'visual' (Canvas + Timeline) vs 'recipe' (CodeMirror DSL)
 	let activeViewTab = $state<'visual' | 'recipe'>('visual');
@@ -418,6 +427,17 @@
 			</Button>
 
 			<Button
+				variant="secondary"
+				size="sm"
+				class="h-8 gap-1.5 text-xs"
+				onclick={() => (isAiModalOpen = true)}
+				title="AI Scene Assistant"
+			>
+				<Sparkles size={14} class="text-accent" />
+				<span class="hidden lg:inline">AI Scene</span>
+			</Button>
+
+			<Button
 				variant="primary"
 				size="sm"
 				class="h-8 gap-1.5 shadow-sm text-xs ml-1"
@@ -619,6 +639,10 @@
 				{project}
 				bind:open={isExportModalOpen}
 				onClose={() => (isExportModalOpen = false)}
+			/>
+			<AiGeneratorModal
+				bind:open={isAiModalOpen}
+				onApply={handleApplyAi}
 			/>
 		{/if}
 	{/if}
